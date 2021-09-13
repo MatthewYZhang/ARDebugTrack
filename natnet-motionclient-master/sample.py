@@ -17,7 +17,14 @@ from natnet import MotionListener, MotionClient
 # print('Connected', addr)
 
 
+# TODO: check if presicion works(quaternion round to 4 digits?)
+# TODO: check if there is anything left out?
+
+
 class Caliberator:
+    '''
+    main work in this class
+    '''
     def __init__(self):
         self.nums = 200 # sample number
         self.steps = 1  # take 1 sample in steps
@@ -35,7 +42,6 @@ class Caliberator:
             if len(self.coor[k]) < self.nums:
                 return True
         return False
-
 
     def takeSamples(self, bodies, markers):
         if self.checkNotEnough():
@@ -61,7 +67,6 @@ class Caliberator:
             self.docal = False
             # sys.exit()
             
-
     def calSphere(self):
         for k in self.coor:
             points = np.array(self.coor[k])
@@ -107,14 +112,13 @@ class Caliberator:
             print(k, center, r)
             self.center[k] = center
             
-
     def caliberate(self):
         for k in self.center:
             n = random.randint(0, self.nums)
-            Rm = np.matrix(R.from_quat(self.quat[k][n]))
+            Rm = np.matrix(R.from_quat(self.quat[k][n])) # Rm gives the matrix so that v' = Rm * v, v shows the real world vector
             v = np.matrix(np.matrix(self.center[k]) - np.matrix(self.coor[k][n])).T
-            vp = Rm * v # vp 应该是我们需要记录下来的一个向量，表示在probe坐标系下的笔尖位置
-            self.offset[k] = vp
+            vp = Rm * v # vp is the offset vector in probe's coordinate system(where end point is tip/sphere center, and begin point is the pivot)
+            self.offset[k] = vp # we save this vector for later use; as long as we know the quaternion, we can get the real position of the tip
             print(k, vp)
 
 
@@ -144,12 +148,14 @@ class Listener(MotionListener):
         strr=''
         # rigidbody pos + rotation
         # marker
+        # after caliberation, we print out every point we recorded, and also get the tip position
         assert len(bodies) == len(markers)
         for i in range(len(bodies)):
             strr += str(bodies[i].body_id) + " pos: "
             strr += str(round(bodies[i].position.x, 4)) + " "
             strr += str(round(bodies[i].position.y, 4)) + " "
             strr += str(round(bodies[i].position.z, 4)) + ";"
+            # p is the pivot position in read world coordinate system
             p = [round(bodies[i].position.x, 4),
                 round(bodies[i].position.y, 4),
                 round(bodies[i].position.z, 4)]
@@ -159,12 +165,14 @@ class Listener(MotionListener):
             strr += str(round(bodies[i].rotation.x, 4)) + " "
             strr += str(round(bodies[i].rotation.y, 4)) + " "
             strr += str(round(bodies[i].rotation.z, 4)) + ";"
+            # q is quaternion of the probe
             q = [round(bodies[i].rotation.x, 4), 
                 round(bodies[i].rotation.y, 4), 
                 round(bodies[i].rotation.z, 4),
                 round(bodies[i].rotation.w, 4)]
             q = np.matrix(q)
             off = self.cali.offset[str(bodies[i].body_id)]
+            # tm shows the matrix that v = tm * v', v is the real world vector
             tm = np.linalg.inv(np.matrix(R.from_quat(q)))
             v = tm * off
             tip = v + p
