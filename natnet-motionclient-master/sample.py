@@ -1,10 +1,11 @@
 ﻿import time
 import socket
 import keyboard
+import random
 import numpy as np
 import sys
 from threading import Thread
-
+from scipy.spatial.transform import Rotation as R
 from natnet import MotionListener, MotionClient
 
 # s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -18,37 +19,50 @@ from natnet import MotionListener, MotionClient
 
 class Caliberator:
     def __init__(self):
-        self.coor = {}
+        self.nums = 200 # sample number
+        self.steps = 1  # take 1 sample in steps
+        self.coor = {}  # key is body_id, value is a list containing nums samples
+        self.quat = {}  # key is body_id, value is a list containing nums quats according to samples
+        self.center = {}
         self.docal = True
-        self.offset = {}
+        self.offset = {}# key is body_id, value is a [x, y, z] offset in probe's coordinte system
         print("Caliberator built")
 
     def checkNotEnough(self):
         if len(self.coor) == 0:
             return True
         for k in self.coor:
-            if len(self.coor[k]) < 200:
+            if len(self.coor[k]) < self.nums:
                 return True
         return False
 
 
-    def caliberationSphere(self, bodies, markers):
+    def takeSamples(self, bodies, markers):
         if self.checkNotEnough():
             for i in range(len(bodies)):
                 if not str(bodies[i].body_id) in self.coor:
                     self.coor[str(bodies[i].body_id)] = []
+                    self.quat[str(bodies[i].body_id)] = []
                 
                 self.coor[str(bodies[i].body_id)].append([
                     round(bodies[i].position.x, 4), 
                     round(bodies[i].position.y, 4), 
                     round(bodies[i].position.z, 4)])
+                # check if this sequence is correct
+                self.quat[str(bodies[i].body_id)].append([
+                    round(bodies[i].rotation.x, 4), 
+                    round(bodies[i].rotation.y, 4), 
+                    round(bodies[i].rotation.z, 4),
+                    round(bodies[i].rotation.w, 4)])
         else:
             # print(self.coor)
-            self.doCaliberation()
-            sys.exit()
+            self.calSphere()
+            self.caliberate()
             self.docal = False
+            # sys.exit()
+            
 
-    def doCaliberation(self):
+    def calSphere(self):
         for k in self.coor:
             points = np.array(self.coor[k])
             points = points.astype(np.float64)  # 防止溢出
@@ -90,11 +104,19 @@ class Caliberator:
             z0 = center[2]
             r2 = xx_avr - 2 * x0 * x_avr + x0 * x0 + yy_avr - 2 * y0 * y_avr + y0 * y0 + zz_avr - 2 * z0 * z_avr + z0 * z0
             r = r2 ** 0.5
-            print(center, r)
+            print(k, center, r)
+            self.center[k] = center
+            
 
-            pass
+    def caliberate(self):
+        for k in self.center:
+            n = random.randint(0, self.nums)
+            Rm = np.matrix(R.from_quat(self.quat[k][n]))
+            v = np.matrix(np.matrix(self.center[k]) - np.matrix(self.coor[k][n])).T
+            vp = Rm * v # vp 应该是我们需要记录下来的一个向量，表示在probe坐标系下的笔尖位置
+            self.offset[k] = vp
+            print(k, vp)
 
-                
 
 
 
@@ -117,17 +139,37 @@ class Listener(MotionListener):
 
     def on_rigid_body(self, bodies, markers, time_info):
         if self.cali.docal:
-            self.cali.caliberationSphere(bodies, markers)
+            self.cali.takeSamples(bodies, markers)
             return
         strr=''
         # rigidbody pos + rotation
         # marker
         assert len(bodies) == len(markers)
         for i in range(len(bodies)):
-            strr += str(bodies[i].body_id) + " "
+            strr += str(bodies[i].body_id) + " pos: "
             strr += str(round(bodies[i].position.x, 4)) + " "
             strr += str(round(bodies[i].position.y, 4)) + " "
-            strr += str(round(bodies[i].position.z, 4)) + "\t"
+            strr += str(round(bodies[i].position.z, 4)) + ";"
+            p = [round(bodies[i].position.x, 4),
+                round(bodies[i].position.y, 4),
+                round(bodies[i].position.z, 4)]
+            p = np.matrix(p)
+            strr += " quat: "
+            strr += str(round(bodies[i].rotation.w, 4)) + " "
+            strr += str(round(bodies[i].rotation.x, 4)) + " "
+            strr += str(round(bodies[i].rotation.y, 4)) + " "
+            strr += str(round(bodies[i].rotation.z, 4)) + ";"
+            q = [round(bodies[i].rotation.x, 4), 
+                round(bodies[i].rotation.y, 4), 
+                round(bodies[i].rotation.z, 4),
+                round(bodies[i].rotation.w, 4)]
+            q = np.matrix(q)
+            off = self.cali.offset[str(bodies[i].body_id)]
+            tm = np.linalg.inv(np.matrix(R.from_quat(q)))
+            v = tm * off
+            tip = v + p
+            strr += str(tip)
+
             # print(type(strr))
             # print(i, strr)
         print(1)
