@@ -21,7 +21,7 @@ from natnet import MotionListener, MotionClient
 # TODO: check if there is anything left out?
 
 
-class Caliberator:
+class Calibrator:
     '''
     main work in this class
     '''
@@ -33,7 +33,7 @@ class Caliberator:
         self.center = {}
         self.docal = True
         self.offset = {}# key is body_id, value is a [x, y, z] offset in probe's coordinte system
-        print("Caliberator built")
+        print("Calibrator built")
 
     def checkNotEnough(self):
         if len(self.coor) == 0:
@@ -63,7 +63,7 @@ class Caliberator:
         else:
             # print(self.coor)
             self.calSphere()
-            self.caliberate()
+            self.calibrate()
             self.docal = False
             # sys.exit()
             
@@ -112,7 +112,7 @@ class Caliberator:
             print(k, center, r)
             self.center[k] = center
             
-    def caliberate(self):
+    def calibrate(self):
         for k in self.center:
             n = random.randint(0, self.nums)
             Rm = np.matrix(R.from_quat(self.quat[k][n])) # Rm gives the matrix so that v' = Rm * v, v shows the real world vector
@@ -129,7 +129,7 @@ class Listener(MotionListener):
     """
     A class of callback functions that are invoked with information from NatNet server.
     """
-    def __init__(self, c: Caliberator):
+    def __init__(self, c: Calibrator):
         super(Listener, self).__init__()
         self.cali = c
         print("Listener successfully built")
@@ -148,7 +148,7 @@ class Listener(MotionListener):
         strr=''
         # rigidbody pos + rotation
         # marker
-        # after caliberation, we print out every point we recorded, and also get the tip position
+        # after calibration, we print out every point we recorded, and also get the tip position
         assert len(bodies) == len(markers)
         for i in range(len(bodies)):
             strr += str(bodies[i].body_id) + " pos: "
@@ -220,7 +220,7 @@ if __name__ == '__main__':
     file = open("positionData.txt", "w")
 
     # Create a NatNet client
-    c = Caliberator()
+    c = Calibrator()
     listener = Listener(c)
     client = MotionClient(listener)
 
