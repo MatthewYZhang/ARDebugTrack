@@ -17,7 +17,7 @@ from natnet import MotionListener, MotionClient
 # print('Connected', addr)
 
 
-# TODO: check if presicion works(quaternion round to 4 digits?)
+# TODO: check if presicion works(quaternion round to 12 digits?)
 # TODO: check if there is anything left out?
 
 
@@ -51,15 +51,15 @@ class Calibrator:
                     self.quat[str(bodies[i].body_id)] = []
                 
                 self.coor[str(bodies[i].body_id)].append([
-                    round(bodies[i].position.x, 4), 
-                    round(bodies[i].position.y, 4), 
-                    round(bodies[i].position.z, 4)])
+                    round(bodies[i].position.x, 12), 
+                    round(bodies[i].position.y, 12), 
+                    round(bodies[i].position.z, 12)])
                 # check if this sequence is correct
                 self.quat[str(bodies[i].body_id)].append([
-                    round(bodies[i].rotation.x, 4), 
-                    round(bodies[i].rotation.y, 4), 
-                    round(bodies[i].rotation.z, 4),
-                    round(bodies[i].rotation.w, 4)])
+                    round(bodies[i].rotation.x, 12), 
+                    round(bodies[i].rotation.y, 12), 
+                    round(bodies[i].rotation.z, 12),
+                    round(bodies[i].rotation.w, 12)])
         else:
             # print(self.coor)
             self.calSphere()
@@ -109,17 +109,20 @@ class Calibrator:
             z0 = center[2]
             r2 = xx_avr - 2 * x0 * x_avr + x0 * x0 + yy_avr - 2 * y0 * y_avr + y0 * y0 + zz_avr - 2 * z0 * z_avr + z0 * z0
             r = r2 ** 0.5
-            print(k, center, r)
+            print("k is {}, center is {}, r is {}".format(k, center, r))
             self.center[k] = center
             
     def calibrate(self):
+        print("in calibrate func")
         for k in self.center:
-            n = random.randint(0, self.nums)
-            Rm = np.matrix(R.from_quat(self.quat[k][n])) # Rm gives the matrix so that v' = Rm * v, v shows the real world vector
+            n = random.randint(0, self.nums-5)
+            Rm = (R.from_quat(self.quat[k][n])).as_matrix() # Rm gives the matrix so that v' = Rm * v, v shows the real world vector            
             v = np.matrix(np.matrix(self.center[k]) - np.matrix(self.coor[k][n])).T
+            print(Rm)
+            print(v)
             vp = Rm * v # vp is the offset vector in probe's coordinate system(where end point is tip/sphere center, and begin point is the pivot)
             self.offset[k] = vp # we save this vector for later use; as long as we know the quaternion, we can get the real position of the tip
-            print(k, vp)
+            print("k is {}, offset is {}".format(k, vp.squeeze()))
 
 
 
@@ -152,35 +155,39 @@ class Listener(MotionListener):
         assert len(bodies) == len(markers)
         for i in range(len(bodies)):
             strr += str(bodies[i].body_id) + " pos: "
-            strr += str(round(bodies[i].position.x, 4)) + " "
-            strr += str(round(bodies[i].position.y, 4)) + " "
-            strr += str(round(bodies[i].position.z, 4)) + ";"
+            strr += str(round(bodies[i].position.x, 12)) + " "
+            strr += str(round(bodies[i].position.y, 12)) + " "
+            strr += str(round(bodies[i].position.z, 12)) + ";"
             # p is the pivot position in read world coordinate system
-            p = [round(bodies[i].position.x, 4),
-                round(bodies[i].position.y, 4),
-                round(bodies[i].position.z, 4)]
+            p = [[round(bodies[i].position.x, 12)],
+                [round(bodies[i].position.y, 12)],
+                [round(bodies[i].position.z, 12)]]
             p = np.matrix(p)
             strr += " quat: "
-            strr += str(round(bodies[i].rotation.w, 4)) + " "
-            strr += str(round(bodies[i].rotation.x, 4)) + " "
-            strr += str(round(bodies[i].rotation.y, 4)) + " "
-            strr += str(round(bodies[i].rotation.z, 4)) + ";"
+            strr += str(round(bodies[i].rotation.x, 12)) + " "
+            strr += str(round(bodies[i].rotation.y, 12)) + " "
+            strr += str(round(bodies[i].rotation.z, 12)) + " "
+            strr += str(round(bodies[i].rotation.w, 12)) + ";\n"
             # q is quaternion of the probe
-            q = [round(bodies[i].rotation.x, 4), 
-                round(bodies[i].rotation.y, 4), 
-                round(bodies[i].rotation.z, 4),
-                round(bodies[i].rotation.w, 4)]
+            q = [round(bodies[i].rotation.x, 12), 
+                round(bodies[i].rotation.y, 12), 
+                round(bodies[i].rotation.z, 12),
+                round(bodies[i].rotation.w, 12)]
             q = np.matrix(q)
-            off = self.cali.offset[str(bodies[i].body_id)]
+
             # tm shows the matrix that v = tm * v', v is the real world vector
-            tm = np.linalg.inv(np.matrix(R.from_quat(q)))
+
+            off = self.cali.offset[str(bodies[i].body_id)]
+            tm = np.linalg.inv(np.matrix((R.from_quat(q)).as_matrix()))
             v = tm * off
+            # print("tm is {}, off is {}, v is {}".format(tm, off, v))
             tip = v + p
-            strr += str(tip)
+            strr += str(v.squeeze())  + "\n"
+            strr += str(tip.squeeze())
 
             # print(type(strr))
             # print(i, strr)
-        print(1)
+        # print(1)
         file.write(strr + "\n")
         # c.send(bytes(str(strr),encoding="UTF8"))
         # i=i+1
